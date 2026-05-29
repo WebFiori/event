@@ -71,7 +71,6 @@ class OrderPlaced {
 
 ```php
 use WebFiori\Event\EventDispatcher;
-use WebFiori\Event\ListenerInterface;
 
 $dispatcher = new EventDispatcher();
 
@@ -80,10 +79,9 @@ $dispatcher->listen(UserRegistered::class, function (UserRegistered $event) {
     echo "Welcome {$event->name}!\n";
 });
 
-// Class-based listener
-class SendWelcomeEmail implements ListenerInterface {
-    public function handle(object $event): void {
-        // $event is guaranteed to be UserRegistered
+// Class-based listener (duck typing — full type hinting on handle())
+class SendWelcomeEmail {
+    public function handle(UserRegistered $event): void {
         mail($event->email, 'Welcome!', "Hi {$event->name}");
     }
 }
@@ -126,17 +124,22 @@ EventDispatcherFacade::dispatch(new OrderPlaced(42, 99.99));
 
 Static wrapper. Same methods as `EventDispatcher` plus `getInstance()`, `setInstance()`, `reset()`.
 
-### `ListenerInterface`
+### Listener Classes (Duck Typing)
+
+Any class with a public `handle()` method can be a listener. Type-hint the parameter with the specific event class for full IDE support:
 
 ```php
-interface ListenerInterface {
-    public function handle(object $event): void;
+class MyListener {
+    public function handle(SomeEvent $event): void {
+        // Full autocomplete on $event
+    }
 }
 ```
 
 ## Design Decisions
 
 - **Events are plain classes** — no marker interface needed. Any object can be an event.
+- **Listeners use duck typing** — any class with a `handle()` method works. No interface to implement, full type hinting on the event parameter.
 - **Listeners are registered explicitly** — `listen(EventClass, listener)`. No magic auto-discovery in the library (the framework handles that).
 - **Listeners execute in registration order** — predictable, no priority system.
 - **No event propagation stopping** — all listeners always run. Keep it simple.
