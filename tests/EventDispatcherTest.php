@@ -179,4 +179,82 @@ class EventDispatcherTest extends TestCase {
         $this->dispatcher->dispatch(new UserRegistered('order@test.com'));
         $this->assertEquals(['first', 'second'], $order);
     }
+    /**
+     * @test
+     */
+    public function testListenerReceivesExactEventInstance() {
+        $original = new OrderPlaced(99, 250.0);
+        $received = null;
+        $this->dispatcher->listen(OrderPlaced::class, function (OrderPlaced $e) use (&$received) {
+            $received = $e;
+        });
+
+        $this->dispatcher->dispatch($original);
+        $this->assertSame($original, $received);
+    }
+    /**
+     * @test
+     */
+    public function testDispatchSameEventMultipleTimes() {
+        $count = 0;
+        $this->dispatcher->listen(UserRegistered::class, function () use (&$count) {
+            $count++;
+        });
+
+        $this->dispatcher->dispatch(new UserRegistered('a@b.com'));
+        $this->dispatcher->dispatch(new UserRegistered('c@d.com'));
+        $this->dispatcher->dispatch(new UserRegistered('e@f.com'));
+        $this->assertEquals(3, $count);
+    }
+    /**
+     * @test
+     */
+    public function testListenerCanMutateEventState() {
+        $event = new class {
+            public int $value = 0;
+        };
+
+        $this->dispatcher->listen(get_class($event), function ($e) {
+            $e->value += 10;
+        });
+        $this->dispatcher->listen(get_class($event), function ($e) {
+            $e->value *= 2;
+        });
+
+        $this->dispatcher->dispatch($event);
+        $this->assertEquals(20, $event->value);
+    }
+    /**
+     * @test
+     */
+    public function testGetListenersReturnsEmptyForUnregisteredEvent() {
+        $this->assertEquals([], $this->dispatcher->getListeners('NonExistent\\Event'));
+    }
+    /**
+     * @test
+     */
+    public function testResetClearsAllEventsCompletely() {
+        $this->dispatcher->listen(UserRegistered::class, function () {});
+        $this->dispatcher->listen(OrderPlaced::class, function () {});
+        $this->assertEquals(2, $this->dispatcher->getListenerCount());
+
+        $this->dispatcher->reset();
+        $this->assertEquals(0, $this->dispatcher->getListenerCount());
+        $this->assertEquals([], $this->dispatcher->getListeners(UserRegistered::class));
+        $this->assertEquals([], $this->dispatcher->getListeners(OrderPlaced::class));
+    }
+    /**
+     * @test
+     */
+    public function testMixedCallableAndClassListeners() {
+        $results = [];
+        $this->dispatcher->listen(UserRegistered::class, function (UserRegistered $e) use (&$results) {
+            $results[] = 'callable:' . $e->email;
+        });
+        $this->dispatcher->listen(UserRegistered::class, new SendWelcomeEmail());
+
+        $this->dispatcher->dispatch(new UserRegistered('mixed@test.com'));
+        $this->assertEquals(['callable:mixed@test.com'], $results);
+        $this->assertEquals('mixed@test.com', SendWelcomeEmail::$lastEmail);
+    }
 }
